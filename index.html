@@ -28,7 +28,13 @@
     overflow: hidden;
     width: 100vw;
     height: 100vh;
-    cursor: none;
+  }
+
+  @media (hover: hover) {
+    body { cursor: none; }
+  }
+  @media (hover: none) {
+    #crosshair { display: none !important; }
   }
 
   /* STARFIELD */
@@ -786,7 +792,15 @@ function spawnAsteroids(choices, correct) {
       </div>
     `;
 
-    el.addEventListener('click', (e) => handleShot(num, correct, el, pos, e.clientX, e.clientY));
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      handleShot(num, correct, el, pos, e.clientX, e.clientY);
+    });
+    el.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      handleShot(num, correct, el, pos, t.clientX, t.clientY);
+    });
     gameEl.appendChild(el);
     asteroids.push({ el, num });
 
@@ -802,29 +816,63 @@ function fireLaser(targetX, targetY) {
   const startX = shipRect.left + shipRect.width / 2;
   const startY = shipRect.bottom;
 
-  const dx = targetX - startX;
-  const dy = targetY - startY;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  const angle = Math.atan2(dx, dy) * (180 / Math.PI);
-
-  const laser = document.createElement('div');
-  laser.style.cssText = `
+  // Use SVG for a perfect straight line — no transform math needed
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.style.cssText = `
     position: fixed;
-    width: 4px;
-    height: ${dist}px;
-    left: ${startX}px;
-    top: ${startY}px;
-    transform-origin: top center;
-    transform: translateX(-50%) rotate(${angle}deg);
-    background: linear-gradient(180deg, white, var(--neon-green), transparent);
-    border-radius: 4px;
-    box-shadow: 0 0 8px var(--neon-green), 0 0 20px var(--neon-green);
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
     pointer-events: none;
     z-index: 55;
-    animation: laserFade 0.45s linear forwards;
+    overflow: visible;
   `;
-  document.body.appendChild(laser);
-  setTimeout(() => laser.remove(), 500);
+
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  const grad = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+  grad.setAttribute('id', 'laserGrad');
+  grad.setAttribute('gradientUnits', 'userSpaceOnUse');
+  grad.setAttribute('x1', startX); grad.setAttribute('y1', startY);
+  grad.setAttribute('x2', targetX); grad.setAttribute('y2', targetY);
+  const s1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+  s1.setAttribute('offset', '0%'); s1.setAttribute('stop-color', 'white');
+  const s2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+  s2.setAttribute('offset', '60%'); s2.setAttribute('stop-color', '#39ff14');
+  const s3 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+  s3.setAttribute('offset', '100%'); s3.setAttribute('stop-color', 'transparent');
+  grad.appendChild(s1); grad.appendChild(s2); grad.appendChild(s3);
+  defs.appendChild(grad);
+  svg.appendChild(defs);
+
+  // Glow line (thick)
+  const glow = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  glow.setAttribute('x1', startX); glow.setAttribute('y1', startY);
+  glow.setAttribute('x2', targetX); glow.setAttribute('y2', targetY);
+  glow.setAttribute('stroke', '#39ff14');
+  glow.setAttribute('stroke-width', '10');
+  glow.setAttribute('stroke-opacity', '0.3');
+  glow.setAttribute('stroke-linecap', 'round');
+
+  // Core line (sharp)
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', startX); line.setAttribute('y1', startY);
+  line.setAttribute('x2', targetX); line.setAttribute('y2', targetY);
+  line.setAttribute('stroke', 'url(#laserGrad)');
+  line.setAttribute('stroke-width', '3');
+  line.setAttribute('stroke-linecap', 'round');
+
+  svg.appendChild(glow);
+  svg.appendChild(line);
+  document.body.appendChild(svg);
+
+  // Fade out
+  let opacity = 1;
+  const fade = setInterval(() => {
+    opacity -= 0.08;
+    svg.style.opacity = opacity;
+    if (opacity <= 0) { clearInterval(fade); svg.remove(); }
+  }, 20);
+  setTimeout(() => { clearInterval(fade); svg.remove(); }, 500);
 }
 
 // ===== EXPLOSION =====
@@ -1063,11 +1111,13 @@ function showStart() {
   document.getElementById('startScreen').classList.remove('hidden');
 }
 
-// Move ship with mouse
-document.addEventListener('mousemove', e => {
-  const ship = document.getElementById('spaceship');
-  const x = (e.clientX / window.innerWidth) * 100;
-  ship.style.left = Math.max(5, Math.min(95, x)) + '%';
+// Ship always centered - no tracking needed
+const ship = document.getElementById('spaceship');
+ship.style.left = '50%';
+
+// Add touch support for asteroids
+document.addEventListener('DOMContentLoaded', () => {
+  // Touch events are handled per-asteroid in spawnAsteroids
 });
 </script>
 </body>
